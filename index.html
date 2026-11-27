@@ -16,18 +16,19 @@ input[type=file]{max-width:100%}button{border:0;border-radius:9px;padding:12px 1
 .status{font-size:13px;color:var(--muted);min-height:18px;margin-top:8px}
 .keyrow{display:flex;gap:8px;flex-wrap:wrap}.keyrow input{flex:1;min-width:210px;padding:11px;border:1px solid var(--line);border-radius:8px}
 .banner{padding:12px 14px;border-radius:10px;margin:12px 0;font-weight:700}.ok{background:var(--greenbg);color:var(--green)}.bad{background:var(--redbg);color:var(--red)}.warn{background:var(--yellowbg);color:var(--yellow)}
+.auditgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}.auditbox{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff}.auditlabel{font-size:12px;color:var(--muted);margin-bottom:4px}.auditvalue{font-size:17px;font-weight:700;overflow-wrap:anywhere}.tag.ok{background:var(--greenbg);color:var(--green)}.tag.bad{background:var(--redbg);color:var(--red)}.tag.warn{background:var(--yellowbg);color:var(--yellow)}
 .tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-size:12px}
 .tag{display:inline-block;border-radius:6px;padding:4px 7px;font-weight:700;font-size:12px;white-space:nowrap}
 ul{padding-left:20px}footer{font-size:12px;color:var(--muted);margin:20px 2px}
 .hidden{display:none}@media(max-width:700px){main{padding:13px}.grid{grid-template-columns:1fr}h1{font-size:21px}}
 </style></head>
-<body><main>
+<body><div id="accessPanel" style="padding:18px;max-width:550px;margin:20px auto;border:1px solid #ddd;border-radius:12px"><strong>Acceso privado Northpharm</strong><p>Ingresá la contraseña de acceso configurada en el alojamiento.</p><input id="accessPassword" type="password" placeholder="Contraseña" style="padding:10px;width:65%"><button onclick="setAccess()">Ingresar</button><p id="accessMessage"></p></div><script>let accessPassword=sessionStorage.getItem('np_access')||'';function secureFetch(url,opts={}){return fetch(url,{...opts,headers:{...(opts.headers||{}),'X-Access-Password':accessPassword}})}async function setAccess(){accessPassword=document.getElementById('accessPassword').value;const r=await secureFetch('/api/status');if(r.ok){sessionStorage.setItem('np_access',accessPassword);document.getElementById('accessPanel').style.display='none';document.getElementById('appArea').style.display='block';status()}else{document.getElementById('accessMessage').textContent='Contraseña incorrecta.'}}</script><div id="appArea" style="display:none"><main>
 <h1>Control de facturas vs SIFACO</h1>
 <p class="sub">Northpharm · Cargá las fotos y obtené la comparación automática.</p>
 
 <section class="card" id="keyCard">
-<h2>Configuración inicial</h2>
-<p class="hint">Pegá una sola vez tu clave de Google AI Studio. Se guarda en esta computadora, dentro del servidor local, y no se muestra nuevamente. No compartas la clave.</p>
+<h2>Configuración de Gemini (administrador)</h2>
+<p class="hint">La clave se configura de forma privada en el alojamiento web. No la ingreses aquí. No compartas la clave.</p>
 <div class="keyrow"><input id="apiKey" type="password" placeholder="Pegá acá tu clave API de Google"><button id="saveKey">Guardar clave</button></div>
 <p class="hint"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Crear una clave gratuita en Google AI Studio</a></p>
 <div class="status" id="keyStatus"></div>
@@ -49,10 +50,10 @@ ul{padding-left:20px}footer{font-size:12px;color:var(--muted);margin:20px 2px}
 <script>
 const $=id=>document.getElementById(id);
 let configured=false;
-async function status(){try{let r=await fetch('/api/status');let j=await r.json();configured=j.configured;$('keyStatus').textContent=configured?'Clave configurada en esta computadora.':'Falta configurar la clave.';}catch(e){$('keyStatus').textContent='No se pudo conectar con el servidor local.';}}
+async function status(){try{let r=await secureFetch('/api/status');let j=await r.json();configured=j.configured;$('keyStatus').textContent=configured?'Clave configurada en esta computadora.':'Falta configurar la clave.';}catch(e){$('keyStatus').textContent='No se pudo conectar con el servidor local.';}}
 $('saveKey').onclick=async()=>{let k=$('apiKey').value.trim();if(!k){$('keyStatus').textContent='Pegá la clave antes de guardar.';return;}
 $('saveKey').disabled=true;$('keyStatus').textContent='Guardando...';
-try{let r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:k})});let j=await r.json();if(!r.ok)throw Error(j.error);$('apiKey').value='';configured=true;$('keyStatus').textContent='Clave guardada. Ya podés comparar.';}
+try{let r=await secureFetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:k})});let j=await r.json();if(!r.ok)throw Error(j.error);$('apiKey').value='';configured=true;$('keyStatus').textContent='Clave guardada. Ya podés comparar.';}
 catch(e){$('keyStatus').textContent=e.message;}finally{$('saveKey').disabled=false;}};
 function showFiles(input,preview,count){let fs=[...$(input).files];$(preview).innerHTML='';fs.forEach(f=>{if(!f.type.startsWith('image/'))return;let im=document.createElement('img');im.src=URL.createObjectURL(f);$(preview).appendChild(im);});$(count).textContent=fs.length?fs.length+' imagen(es) seleccionada(s).':'Todavía no cargaste imágenes.';}
 $('invoiceFiles').onchange=()=>showFiles('invoiceFiles','invoicePreview','invoiceCount');
@@ -70,10 +71,22 @@ function render(d){
  const root=$('results');root.innerHTML='';
  const items=Array.isArray(d.items)?d.items:[];
  const dif=items.filter(x=>['FALTA EN SIFACO','SOBRA EN SIFACO','CANTIDAD DISTINTA'].includes(x.resultado)).length;
- const review=items.filter(x=>x.resultado==='REVISAR').length+(d.dudas||[]).length;
- const banner=document.createElement('div');banner.className='banner '+(dif?'bad':review?'warn':'ok');
- banner.textContent=d.estado_general==='COINCIDE'&&!dif&&!review?'Todo coincide según las imágenes.':dif?`Se detectaron ${dif} producto(s) con diferencias.`:'Hay datos que necesitan revisión manual.';
+ const conceptStatus=d.estado_concepto_sifaco||'REVISAR';
+ const conceptProblem=conceptStatus!=='OK';
+ const review=items.filter(x=>x.resultado==='REVISAR').length+(d.dudas||[]).length+(conceptStatus==='REVISAR'?1:0);
+ const banner=document.createElement('div');banner.className='banner '+(dif||conceptStatus==='DIFERENTE'?'bad':review?'warn':'ok');
+ banner.textContent=(dif||conceptProblem)?'Se detectaron diferencias o datos administrativos para corregir.':review?'Hay datos que necesitan revisión manual.':'Productos y concepto SIFACO correctos según las imágenes.';
  root.appendChild(banner);
+ const audit=document.createElement('div');audit.className='auditgrid';
+ const concept=document.createElement('div');concept.className='auditbox';
+ const conceptLabel=document.createElement('div');conceptLabel.className='auditlabel';conceptLabel.textContent='Concepto en SIFACO (debe ser COMPRA)';
+ const conceptValue=document.createElement('div');conceptValue.className='auditvalue';conceptValue.textContent=d.concepto_sifaco||'No identificado';
+ const conceptTag=document.createElement('span');conceptTag.className='tag '+(conceptStatus==='OK'?'ok':conceptStatus==='DIFERENTE'?'bad':'warn');conceptTag.textContent=conceptStatus==='OK'?'OK':conceptStatus==='DIFERENTE'?'DIFERENTE':'REVISAR';
+ concept.append(conceptLabel,conceptValue,conceptTag);audit.appendChild(concept);
+ const order=document.createElement('div');order.className='auditbox';
+ const orderLabel=document.createElement('div');orderLabel.className='auditlabel';orderLabel.textContent='Pedido detectado en la factura';
+ const orderValue=document.createElement('div');orderValue.className='auditvalue';orderValue.textContent=d.pedido||'No identificado';
+ order.append(orderLabel,orderValue);audit.appendChild(order);root.appendChild(audit);
  const meta=document.createElement('p');meta.className='small';
  meta.textContent=`Factura: ${d.nro_factura||'No identificada'} · Proveedor factura: ${d.proveedor_factura||'No identificado'} · Proveedor SIFACO: ${d.proveedor_sifaco||'No identificado'}`;
  root.appendChild(meta);
@@ -94,7 +107,7 @@ $('compare').onclick=async()=>{
  try{
   let images=[];for(let f of [...a,...b])images.push(await toJpeg(f));
   $('mainStatus').textContent='La IA está leyendo y comparando. Puede tardar un poco...';
-  let r=await fetch('/api/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images})});
+  let r=await secureFetch('/api/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images})});
   let j=await r.json();if(!r.ok)throw Error(j.error||'Error al comparar.');
   render(j.result);$('mainStatus').textContent='Comparación terminada.';
  }catch(e){$('mainStatus').textContent=e.message;}
@@ -102,4 +115,4 @@ $('compare').onclick=async()=>{
 };
 $('clear').onclick=()=>{['invoiceFiles','sifacoFiles'].forEach(id=>$(id).value='');$('invoicePreview').innerHTML='';$('sifacoPreview').innerHTML='';$('invoiceCount').textContent='Todavía no cargaste fotos.';$('sifacoCount').textContent='Todavía no cargaste capturas.';$('results').innerHTML='';$('mainStatus').textContent='';};
 status();
-</script></body></html>
+</script></div><script>if(accessPassword){secureFetch("/api/status").then(r=>{if(r.ok){document.getElementById("accessPanel").style.display="none";document.getElementById("appArea").style.display="block"}})}</script></body></html>

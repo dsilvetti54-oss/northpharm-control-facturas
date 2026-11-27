@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: northpharm-facturas
+    runtime: python
+    plan: free
+    buildCommand: "echo listo"
+    startCommand: "python server.py"
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ACCESS_PASSWORD
+        sync: false
