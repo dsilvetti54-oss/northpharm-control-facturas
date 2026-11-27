@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Northpharm | Control de facturas</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#dce2eb;--blue:#244477;--green:#167343;--greenbg:#e6f5ec;--red:#b42318;--redbg:#ffebe9;--yellow:#946200;--yellowbg:#fff4d6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Arial,sans-serif}main{max-width:980px;margin:auto;padding:22px}
+h1{font-size:24px;color:var(--blue);margin:0 0 5px}.sub,.hint,.small{color:var(--muted);font-size:13px}.sub{margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px #17203308}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}h2{font-size:17px;margin:0 0 6px}
+.drop{border:2px dashed #b8c5d8;border-radius:12px;padding:18px;text-align:center;background:#fafcff}
+input[type=file]{max-width:100%}button{border:0;border-radius:9px;padding:12px 17px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}
+.secondary{background:#e8edf5;color:var(--blue)}.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:14px 0}
+.preview{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.preview img{height:68px;max-width:95px;object-fit:contain;border:1px solid var(--line);border-radius:7px;background:white}
+.status{font-size:13px;color:var(--muted);min-height:18px;margin-top:8px}
+.keyrow{display:flex;gap:8px;flex-wrap:wrap}.keyrow input{flex:1;min-width:210px;padding:11px;border:1px solid var(--line);border-radius:8px}
+.banner{padding:12px 14px;border-radius:10px;margin:12px 0;font-weight:700}.ok{background:var(--greenbg);color:var(--green)}.bad{background:var(--redbg);color:var(--red)}.warn{background:var(--yellowbg);color:var(--yellow)}
+.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-size:12px}
+.tag{display:inline-block;border-radius:6px;padding:4px 7px;font-weight:700;font-size:12px;white-space:nowrap}
+ul{padding-left:20px}footer{font-size:12px;color:var(--muted);margin:20px 2px}
+.hidden{display:none}@media(max-width:700px){main{padding:13px}.grid{grid-template-columns:1fr}h1{font-size:21px}}
+</style></head>
+<body><main>
+<h1>Control de facturas vs SIFACO</h1>
+<p class="sub">Northpharm · Cargá las fotos y obtené la comparación automática.</p>
+
+<section class="card" id="keyCard">
+<h2>Configuración inicial</h2>
+<p class="hint">Pegá una sola vez tu clave de Google AI Studio. Se guarda en esta computadora, dentro del servidor local, y no se muestra nuevamente. No compartas la clave.</p>
+<div class="keyrow"><input id="apiKey" type="password" placeholder="Pegá acá tu clave API de Google"><button id="saveKey">Guardar clave</button></div>
+<p class="hint"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Crear una clave gratuita en Google AI Studio</a></p>
+<div class="status" id="keyStatus"></div>
+</section>
+
+<div class="grid">
+<section class="card"><h2>1. Factura del proveedor</h2><p class="hint">Seleccioná todas las fotos o páginas de la factura.</p>
+<div class="drop"><input id="invoiceFiles" type="file" accept="image/*" multiple><div class="preview" id="invoicePreview"></div></div><p class="status" id="invoiceCount">Todavía no cargaste fotos.</p></section>
+<section class="card"><h2>2. Pantalla de SIFACO</h2><p class="hint">Seleccioná todas las capturas donde se vean los productos y cantidades.</p>
+<div class="drop"><input id="sifacoFiles" type="file" accept="image/*" multiple><div class="preview" id="sifacoPreview"></div></div><p class="status" id="sifacoCount">Todavía no cargaste capturas.</p></section>
+</div>
+
+<section class="card">
+<div class="actions"><button id="compare">COMPARAR</button><button class="secondary" id="clear">Limpiar fotos</button><span class="status" id="mainStatus"></span></div>
+<div id="results"></div>
+</section>
+<footer>La comparación no modifica SIFACO. Revisá las diferencias antes de corregir el ingreso. En el nivel gratuito de Google existen límites de uso y Google puede utilizar el contenido enviado para mejorar sus productos; evitá usarlo con información que tu empresa no autorice compartir.</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let configured=false;
+async function status(){try{let r=await fetch('/api/status');let j=await r.json();configured=j.configured;$('keyStatus').textContent=configured?'Clave configurada en esta computadora.':'Falta configurar la clave.';}catch(e){$('keyStatus').textContent='No se pudo conectar con el servidor local.';}}
+$('saveKey').onclick=async()=>{let k=$('apiKey').value.trim();if(!k){$('keyStatus').textContent='Pegá la clave antes de guardar.';return;}
+$('saveKey').disabled=true;$('keyStatus').textContent='Guardando...';
+try{let r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:k})});let j=await r.json();if(!r.ok)throw Error(j.error);$('apiKey').value='';configured=true;$('keyStatus').textContent='Clave guardada. Ya podés comparar.';}
+catch(e){$('keyStatus').textContent=e.message;}finally{$('saveKey').disabled=false;}};
+function showFiles(input,preview,count){let fs=[...$(input).files];$(preview).innerHTML='';fs.forEach(f=>{if(!f.type.startsWith('image/'))return;let im=document.createElement('img');im.src=URL.createObjectURL(f);$(preview).appendChild(im);});$(count).textContent=fs.length?fs.length+' imagen(es) seleccionada(s).':'Todavía no cargaste imágenes.';}
+$('invoiceFiles').onchange=()=>showFiles('invoiceFiles','invoicePreview','invoiceCount');
+$('sifacoFiles').onchange=()=>showFiles('sifacoFiles','sifacoPreview','sifacoCount');
+async function toJpeg(file){
+ const img=await createImageBitmap(file);const max=1800,scale=Math.min(1,max/Math.max(img.width,img.height));
+ const canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+ canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+ const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.84));
+ if(!blob)throw Error('No se pudo preparar una de las fotos.');
+ const b64=await new Promise((resolve,reject)=>{let r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(blob);});
+ return {mime_type:'image/jpeg',data:b64};
+}
+function render(d){
+ const root=$('results');root.innerHTML='';
+ const items=Array.isArray(d.items)?d.items:[];
+ const dif=items.filter(x=>['FALTA EN SIFACO','SOBRA EN SIFACO','CANTIDAD DISTINTA'].includes(x.resultado)).length;
+ const review=items.filter(x=>x.resultado==='REVISAR').length+(d.dudas||[]).length;
+ const banner=document.createElement('div');banner.className='banner '+(dif?'bad':review?'warn':'ok');
+ banner.textContent=d.estado_general==='COINCIDE'&&!dif&&!review?'Todo coincide según las imágenes.':dif?`Se detectaron ${dif} producto(s) con diferencias.`:'Hay datos que necesitan revisión manual.';
+ root.appendChild(banner);
+ const meta=document.createElement('p');meta.className='small';
+ meta.textContent=`Factura: ${d.nro_factura||'No identificada'} · Proveedor factura: ${d.proveedor_factura||'No identificado'} · Proveedor SIFACO: ${d.proveedor_sifaco||'No identificado'}`;
+ root.appendChild(meta);
+ const wrap=document.createElement('div');wrap.className='tablewrap';const table=document.createElement('table');
+ table.innerHTML='<thead><tr><th>Producto</th><th>Factura</th><th>SIFACO</th><th>Resultado</th><th>Observación</th></tr></thead>';
+ const tbody=document.createElement('tbody');
+ items.forEach(it=>{let tr=document.createElement('tr');[it.producto||'Sin identificar',it.unidades_factura??'?',it.unidades_sifaco??'?',it.resultado||'REVISAR',it.nota||''].forEach((v,i)=>{let td=document.createElement('td');td.textContent=v;if(i===3){let tag=document.createElement('span');tag.className='tag '+(v==='OK'?'ok':v==='REVISAR'?'warn':'bad');tag.textContent=v;td.textContent='';td.appendChild(tag);}tr.appendChild(td);});tbody.appendChild(tr);});
+ table.appendChild(tbody);wrap.appendChild(table);root.appendChild(wrap);
+ if(d.total_factura!=null||d.total_sifaco!=null){let p=document.createElement('p');p.className='small';p.textContent=`Total factura: ${d.total_factura??'No leído'} · Total SIFACO: ${d.total_sifaco??'No leído'}`;root.appendChild(p);}
+ if(d.dudas&&d.dudas.length){let h=document.createElement('h3');h.textContent='Para revisar';root.appendChild(h);let ul=document.createElement('ul');d.dudas.forEach(x=>{let li=document.createElement('li');li.textContent=x;ul.appendChild(li);});root.appendChild(ul);}
+}
+$('compare').onclick=async()=>{
+ const a=[...$('invoiceFiles').files],b=[...$('sifacoFiles').files];
+ if(!configured){$('mainStatus').textContent='Primero configurá la clave de Google.';return;}
+ if(!a.length||!b.length){$('mainStatus').textContent='Cargá al menos una foto de la factura y una captura de SIFACO.';return;}
+ if(a.length+b.length>10){$('mainStatus').textContent='Podés cargar hasta 10 imágenes por comparación.';return;}
+ $('compare').disabled=true;$('results').innerHTML='';$('mainStatus').textContent='Preparando imágenes...';
+ try{
+  let images=[];for(let f of [...a,...b])images.push(await toJpeg(f));
+  $('mainStatus').textContent='La IA está leyendo y comparando. Puede tardar un poco...';
+  let r=await fetch('/api/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images})});
+  let j=await r.json();if(!r.ok)throw Error(j.error||'Error al comparar.');
+  render(j.result);$('mainStatus').textContent='Comparación terminada.';
+ }catch(e){$('mainStatus').textContent=e.message;}
+ finally{$('compare').disabled=false;}
+};
+$('clear').onclick=()=>{['invoiceFiles','sifacoFiles'].forEach(id=>$(id).value='');$('invoicePreview').innerHTML='';$('sifacoPreview').innerHTML='';$('invoiceCount').textContent='Todavía no cargaste fotos.';$('sifacoCount').textContent='Todavía no cargaste capturas.';$('results').innerHTML='';$('mainStatus').textContent='';};
+status();
+</script></body></html>
